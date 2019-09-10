@@ -275,7 +275,7 @@ ifeq ($(BUNDLE_DEBUG_LIBS),1)
 else
 	@$(MAKE) $(QUIET_MAKE) release
 endif
-	@for subdir in $(bindir) $(datarootdir)/julia/stdlib/$(VERSDIR) $(docdir) $(man1dir) $(includedir)/julia $(libdir) $(private_libdir) $(sysconfdir); do \
+	@for subdir in $(bindir) $(datarootdir)/julia/stdlib/$(VERSDIR) $(docdir) $(man1dir) $(includedir)/julia $(libdir) $(private_libdir) $(sysconfdir) $(libexecdir); do \
 		mkdir -p $(DESTDIR)$$subdir; \
 	done
 
@@ -292,6 +292,9 @@ ifeq ($(BUNDLE_DEBUG_LIBS),1)
 endif
 	-$(INSTALL_M) $(build_bindir)/libopenlibm.dll.a $(DESTDIR)$(libdir)/
 else
+
+	# Install `7z` into libexec/
+	$(INSTALL_M) $(build_bindir)/7z $(DESTDIR)$(libexecdir)/
 
 # Copy over .dSYM directories directly for Darwin
 ifneq ($(DARWIN_FRAMEWORK),1)
