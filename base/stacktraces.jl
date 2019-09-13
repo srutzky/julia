@@ -7,6 +7,7 @@ module StackTraces
 
 
 import Base: hash, ==, show
+import Core: CodeInfo, MethodInstance
 using Base.Printf: @printf
 using Base: something
 
@@ -54,7 +55,7 @@ struct StackFrame # this type should be kept platform-agnostic so that profiles 
     "the line number in the file containing the execution context"
     line::Int
     "the MethodInstance or CodeInfo containing the execution context (if it could be found)"
-    linfo::Union{Core.MethodInstance, Core.CodeInfo, Nothing}
+    linfo::Union{MethodInstance, CodeInfo, Nothing}
     "true if the code is from C"
     from_c::Bool
     "true if the code is from an inlined frame"
@@ -123,7 +124,7 @@ const top_level_scope_sym = Symbol("top-level scope")
 using Base.Meta
 is_loc_meta(expr, kind) = isexpr(expr, :meta) && length(expr.args) >= 1 && expr.args[1] === kind
 function lookup(ip::Base.InterpreterIP)
-    if ip.code isa Core.MethodInstance && ip.code.def isa Method
+    if ip.code isa MethodInstance && ip.code.def isa Method
         codeinfo = ip.code.uninferred
         func = ip.code.def.name
         file = ip.code.def.file
@@ -132,7 +133,7 @@ function lookup(ip::Base.InterpreterIP)
         # interpreted top-level expression with no CodeInfo
         return [StackFrame(top_level_scope_sym, empty_sym, 0, nothing, false, false, 0)]
     else
-        @assert ip.code isa Core.CodeInfo
+        @assert ip.code isa CodeInfo
         codeinfo = ip.code
         func = top_level_scope_sym
         file = empty_sym
@@ -164,27 +165,19 @@ lookup(s::Tuple{StackFrame,Int}) = StackFrame[s[1]]
 Get a backtrace object for the current program point.
 """
 function Base.backtrace()
-    bt, bt2 = ccall(:jl_backtrace_from_here, Any, (Int32,), false)
+    bt1, bt2 = ccall(:jl_backtrace_from_here, Any, (Int32,), false)
+    bt = Base._reformat_bt(bt1, bt2)
     if length(bt) > 2
         # remove frames for jl_backtrace_from_here and backtrace()
-        if bt[2] == Ptr{Cvoid}(-1%UInt)
-            # backtrace() is interpreted
-            # Note: win32 is missing the top frame (see https://bugs.chromium.org/p/crashpad/issues/detail?id=53)
-            @static if Base.Sys.iswindows() && Int === Int32
-                deleteat!(bt, 1:2)
-            else
-                deleteat!(bt, 1:3)
-            end
-            pushfirst!(bt2)
+        @static if Base.Sys.iswindows() && Int === Int32
+            # Note: win32 is missing the top frame
+            # (see https://bugs.chromium.org/p/crashpad/issues/detail?id=53)
+            deleteat!(bt, 1)
         else
-            @static if Base.Sys.iswindows() && Int === Int32
-                deleteat!(bt, 1)
-            else
-                deleteat!(bt, 1:2)
-            end
+            deleteat!(bt, 1:2)
         end
     end
-    return Base._reformat_bt(bt, bt2)
+    bt
 end
 
 """
@@ -243,7 +236,7 @@ function remove_frames!(stack::StackTrace, m::Module)
     return stack
 end
 
-is_top_level_frame(f::StackFrame) = f.linfo isa Core.CodeInfo || (f.linfo === nothing && f.func === top_level_scope_sym)
+is_top_level_frame(f::StackFrame) = f.linfo isa CodeInfo || (f.linfo === nothing && f.func === top_level_scope_sym)
 
 function show_spec_linfo(io::IO, frame::StackFrame)
     if frame.linfo === nothing
@@ -257,13 +250,13 @@ function show_spec_linfo(io::IO, frame::StackFrame)
                         :nothing
             printstyled(io, string(frame.func), color=color)
         end
-    elseif frame.linfo isa Core.MethodInstance
+    elseif frame.linfo isa MethodInstance
         if isa(frame.linfo.def, Method)
             Base.show_tuple_as_call(io, frame.linfo.def.name, frame.linfo.specTypes)
         else
             Base.show(io, frame.linfo)
         end
-    elseif frame.linfo isa Core.CodeInfo
+    elseif frame.linfo isa CodeInfo
         print(io, "top-level scope")
     end
 end
@@ -296,13 +289,22 @@ function from(frame::StackFrame, m::Module)
     finfo = frame.linfo
     result = false
 
-    if finfo isa Core.MethodInstance
+    if finfo isa MethodInstance
         frame_m = finfo.def
         isa(frame_m, Method) && (frame_m = frame_m.module)
         result = nameof(frame_m) === nameof(m)
     end
 
     return result
+end
+
+function Base.show(io::IO, ip::Base.InterpreterIP)
+    print(io, typeof(ip))
+    if ip.code isa CodeInfo
+        print(io, " in top-level CodeInfo for $(ip.mod) at statement $(Int(ip.stmt))")
+    else
+        print(io, " in $(ip.code) at statement $(Int(ip.stmt))")
+    end
 end
 
 end
