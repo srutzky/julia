@@ -6461,6 +6461,13 @@ let A=[0, missing], B=[missing, 0], C=Vector{Union{Int, Missing}}(undef, 6)
     @test isequal(C, [0, missing, missing, missing, 0, missing])
 end
 
+# non-power-of-2 element sizes
+primitive type TypeWith24Bits 24 end
+let x = Core.Intrinsics.trunc_int(TypeWith24Bits, 0x112233), a = [x,x]
+    Core.arrayset(true, a, x, 2)
+    @test a == [x, x]
+end
+
 # issue #29718
 function f29718()
     nt = NamedTuple{(:a, :b, :c, :d, :e, :f,),
