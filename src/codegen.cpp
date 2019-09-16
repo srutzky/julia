@@ -6467,14 +6467,14 @@ static std::unique_ptr<Module> emit_function(
             find_next_stmt(cursor + 1);
             continue;
         }
-        if (jl_is_detachnode(stmt) {
+        if (jl_is_detachnode(stmt)) {
             int lname = jl_detachnode_label(stmt);
             come_from_bb[cursor+1] = ctx.builder.GetInsertBlock();
             ctx.builder.CreateBr(BB[lname]);
             find_next_stmt(lname - 1);
             continue;
         }
-        if (jl_is_reattachnode(stmt) {
+        if (jl_is_reattachnode(stmt)) {
             int lname = jl_reattachnode_label(stmt);
             come_from_bb[cursor+1] = ctx.builder.GetInsertBlock();
             ctx.builder.CreateBr(BB[lname]);
